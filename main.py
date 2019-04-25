@@ -35,6 +35,9 @@ import os
 from models.VGG import *
 from models.FCN import *
 
+# utils
+from utils.dataloader import *
+
 
 """
 ##############################################################################
