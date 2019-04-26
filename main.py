@@ -62,27 +62,28 @@ else:
 # Training, Validation, and Testing
 ##############################################################################
 """
-
-
-def training(n_epochs, n_class, model, optimizer, criterion, train_loader, val_loader, IU_scores, pixel_scores, model_dir, score_dir):
+def training(model, run, n_epochs, dataset, trainLoader, testLoader, running_metrics, model_dir):
     """
     Training process for semantic segmentation
 
-    :param n_epochs: number of epochs
-    :param n_class: number of classes
     :param model: chosen model, ex) FCNs
-    :param optimizer: input optimizer, ex) SGD
-    :param criterion: loss criteria, ex) BCE for semantic segmentation
-    :param train_loader: train dataset loader
-    :param val_loader: validation dataset loader
-    :param IU_scores: Intersection Over Union measurement
-    :param pixel_scores: Pixel intersection score
+    :param run: current run of the program
+    :param n_epochs: number of epochs
+    :param dataset: chosen dataset, ex) Cityscapes
+    :param trainLoader: train dataset loader
+    :param testLoader: test dataset loader
+    :param running_metrics: class to save metrics over time
     :param model_dir: directory for model output
-    :param score_dir: directory for scores output
     :return:
     """
 
-    running_loss = 0
+    # set best iou variable to be initialized for testing
+    best_iou = 0
+
+    # set loss and optimization method
+    criterion = cross_entropy2d
+    optimizer = optim.SGD(model.parameters(), lr=1e-3, momentum=0.9,
+                          weight_decay=0.0016)  # paper uses stochastic gradient descent
 
     # run through each epoch
     for epoch in range(n_epochs):
@@ -91,8 +92,9 @@ def training(n_epochs, n_class, model, optimizer, criterion, train_loader, val_l
         begin_epoch = time.time()
 
         # run through each image relative to batch size
-        for iter, data in enumerate(train_loader, 0):
+        for iter, data in enumerate(trainLoader, 0):
 
+            # set to train model
             model.train()
 
             # grab images with labels
@@ -109,100 +111,77 @@ def training(n_epochs, n_class, model, optimizer, criterion, train_loader, val_l
             loss.backward()
             optimizer.step()
 
-            # print info after around 10 iterations during an epoch
-            if iter % 10 == 0:
+            # print info after 10 iterations during an epoch
+            if iter % 40 == 0:
                 print("epoch: {}, iter: {}, loss: {}".format(epoch, iter, loss.item()))
 
         # print time after each epoch
         print("Finish epoch {}, time elapsed {}".format(epoch, time.time() - begin_epoch))
-        if(epoch != 0 and epoch % 50 == 0):
-            # saving model after running through all epochs
-            torch.save(model, model_dir)
 
-        val(epoch, n_class, model, val_loader, IU_scores, pixel_scores, score_dir)
+        # run through testing on model
+        testing(model, run, epoch, dataset, testLoader, running_metrics, best_iou, model_dir)
 
     # saving model after running through all epochs
-    today_time = str(datetime.today()).replace(':', '_').replace(' ', '_')
-    name = os.path.join(model_dir, '_' + today_time + '_model.ckpt')
+    name = os.path.join(model_dir, '{}_{}_final_epoch_at_epoch_{}_on_run_{}.ckpt'.format(model.__class__.__name__, dataset, n_epochs, run))
     torch.save(model.state_dict(), name)
 
 
-
-def val(epoch, n_class, model, val_loader, IU_scores, pixel_scores, score_dir):
+def testing(model, run, epoch, dataset, testLoader, running_metrics, best_iou, model_dir):
     """
-    Training process for semantic segmentation
+    Testing process for semantic segmentation
 
-    :param epoch: number of epochs
-    :param n_class: number of classes
     :param model: chosen model, ex) FCNs
-    :param val_loader: validation dataset loader
-    :param IU_scores: Intersection Over Union measurement
-    :param pixel_scores: Pixel intersection score
-    :param score_dir: directory for scores output
+    :param run: current run of the program
+    :param epoch: current epoch
+    :param dataset: chosen dataset, ex) Cityscapes
+    :param testLoader: testing dataset loader
+    :param running_metrics: class to save metrics over time
+    :param best_iou: save models with best_iou after 10 epochs
+    :param model_dir: directory for model output
     :return:
     """
+
+    # set model to evuation mode
     model.eval()
-    total_ious = []
-    pixel_accs = []
 
-    for iter, data in enumerate(val_loader, 0):
+    # don't want to compute gradients so no grad
+    with torch.no_grad():
 
-        # grab images with labels
-        images, labels = data
-        images = images.to(device)
-        #labels = labels.to(device)
+        # run through each image relative to batch size
+        for iter, data in enumerate(testLoader, 0):
 
-        output = model(images)
-        output = output.data.cpu().numpy()
+            # grab images with labels
+            images, labels = data
+            images = images.to(device)
+            #labels = labels.to(device)
 
-        N, _, h, w = output.shape
-        pred = output.transpose(0, 2, 3, 1).reshape(-1, n_class).argmax(axis=1).reshape(N, h, w)
+            # run through model
+            output = model(images)
 
-        target = labels.cpu().numpy().reshape(N, h, w)
-        for p, t in zip(pred, target):
-            total_ious.append(iou(p, t, n_class))
-            pixel_accs.append(pixel_acc(p, t))
+            # check predicted vs ground truth
+            pred = output.data.max(1)[1].cpu().numpy()
+            gt = labels.data.cpu().numpy()
 
-    # Calculate average IoU
-    total_ious = np.array(total_ious).T  # n_class * val_len
-    ious = np.nanmean(total_ious, axis=1)
-    pixel_accs = np.array(pixel_accs).mean()
-    print("epoch{}, pix_acc: {}, meanIoU: {}, IoUs: {}".format(epoch, pixel_accs, np.nanmean(ious), ious))
-    IU_scores[epoch] = ious
-    np.save(os.path.join(score_dir, "meanIU"), IU_scores)
-    pixel_scores[epoch] = pixel_accs
-    np.save(os.path.join(score_dir, "meanPixel"), pixel_scores)
+            # update running metrics
+            running_metrics.update(gt, pred)
 
+    # get metrics from running metrics
+    score, class_iou = running_metrics.get_scores()
+    for k, v in score.items():
+        print(k, v)
+    for k, v in class_iou.items():
+        print(k, v)
 
-# borrow functions and modify it from https://github.com/Kaixhin/FCN-semantic-segmentation/blob/master/main.py
-# Calculates class intersections over unions
-def iou(pred, target, n_class):
-    ious = []
-    for cls in range(n_class):
-        pred_inds = pred == cls
-        target_inds = target == cls
-        intersection = pred_inds[target_inds].sum()
-        union = pred_inds.sum() + target_inds.sum() - intersection
-        if union == 0:
-            ious.append(float('nan'))  # if there is no ground truth, do not include in evaluation
-        else:
-            ious.append(float(intersection) / max(union, 1))
-    return ious
-
-
-def pixel_acc(pred, target):
-    correct = (pred == target).sum()
-    total   = (target == target).sum()
-    return correct / total
-
+    # check if best iou was obtained and if epoch > 10, then if true, save that model
+    if score["Mean IoU : \t"] > best_iou and epoch >= 10:
+        name = os.path.join(model_dir, '{}_{}_best_iou_at_epoch_{}_on_run_{}.ckpt'.format(model.__class__.__name__, dataset, epoch, run))
+        torch.save(model.state_dict(), name)
 
 """
 ##############################################################################
 # Parser
 ##############################################################################
 """
-
-
 def create_parser():
     """
     Function to take in input arguments from the user
@@ -252,8 +231,6 @@ def create_parser():
                         help='Defines num runs for program; default=1')
     parser.add_argument('--batch_size', type=int, default=10,
                         help='Defines batch size for data; default=10')
-    parser.add_argument('--lr', type=float, default=1e-3,
-                        help='Defines learning rate for training; default=1e-3')
     parser.add_argument('--random_seed', type=int, default=7,
                         help='Defines random seed value, if set to 0 then randomly sets seed; default=7')
 
@@ -285,11 +262,6 @@ def main():
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
 
-    # create dir for score
-    score_dir = "scores"
-    if not os.path.exists(score_dir):
-        os.makedirs(score_dir)
-
     # determine dataset being used
     if(args.dataset == 'City'):
         trainLoader, _, testLoader = load_data_Cityscapes(args.batch_size)
@@ -317,30 +289,21 @@ def main():
     else:
         raise ValueError('Invalid model name. Run python3 main.py -h to review your options.')
 
-    # set loss and optimization method
-    criterion = cross_entropy2d
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.0016) # paper uses stochastic gradient descent
+    print(model.__class__.__name__ + ' was selected')
 
     # metrics
-    metrics = runningScore(n_classes)
+    running_metrics = runningScore(n_classes)
 
-    # variables to determine scores to measure model performance on validation set
-    IU_scores = np.zeros((args.n_epochs, n_classes))
-    pixel_scores = np.zeros(args.n_epochs)
-
-    # training and validation
-    # TODO - replace the loaders with datasets later
-    training(args.n_epochs,
-             n_classes,
-             model,
-             optimizer,
-             criterion,
-             trainLoader,
-             testLoader,
-             IU_scores,
-             pixel_scores,
-             model_dir,
-             score_dir)
+    for run in range(args.n_runs):
+        # training and validation in one function
+        training(model,
+                 run,
+                 args.n_epochs,
+                 args.dataset,
+                 trainLoader,
+                 testLoader,
+                 running_metrics,
+                 model_dir)
 
 
 if __name__ == '__main__':
