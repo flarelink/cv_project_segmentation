@@ -18,27 +18,39 @@ def load_data_Cityscapes(batch_size):
     """
 
     transform = transforms.Compose([
+    transforms.Resize((256, 256)),
     transforms.ToTensor()
     ])
 
-    trainset = torchvision.datasets.Cityscapes(root='./gtFine',
+    trainset = torchvision.datasets.Cityscapes(root='./cityscapes_dataset',
                                                split='train',
-                                               mode='gtFine',
+                                               mode='fine',
                                                target_type='semantic',
-                                               transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+                                               transform=transform,
+                                               target_transform=transform)
+    trainLoader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                               shuffle=True, num_workers=4)
 
-    testset = torchvision.datasets.Cityscapes(root='./gtFine',
-                                              split='test',
-                                              mode='gtFine',
-                                              target_type='semantic',
-                                              transform=transform)
+    valset = torchvision.datasets.Cityscapes(root='./cityscapes_dataset',
+                                               split='val',
+                                               mode='fine',
+                                               target_type='semantic',
+                                               transform=transform,
+                                               target_transform=transform)
+    valLoader = torch.utils.data.DataLoader(valset, batch_size=batch_size,
+                                              shuffle=True, num_workers=4)
 
-    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+    testset = torchvision.datasets.Cityscapes(root='./cityscapes_dataset',
+                                              split='test',
+                                              mode='fine',
+                                              target_type='semantic',
+                                              transform=transform,
+                                              target_transform=transform)
+
+    testLoader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                              shuffle=False, num_workers=4)
 
-    return trainloader, testloader
+    return trainLoader, valLoader, testLoader
 
 
 def load_data_VOC(batch_size):
@@ -49,23 +61,26 @@ def load_data_VOC(batch_size):
     """
 
     transform = transforms.Compose([
+    transforms.Resize((256, 256)),
     transforms.ToTensor()
     ])
 
     trainset = torchvision.datasets.VOCSegmentation(root='./VOC',
-                                                    image_set='train',
+                                                    image_set='trainval',
                                                     download=True,
-                                                    transform=transform)
+                                                    transform=transform,
+                                                    target_transform=transform)
 
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+    trainLoader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                               shuffle=True, num_workers=4)
 
     testset = torchvision.datasets.VOCSegmentation(root='./VOC',
-                                                   image_set='test',
+                                                   image_set='val',
                                                    download=True,
-                                                   transform=transform)
+                                                   transform=transform,
+                                                   target_transform=transform)
 
-    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+    testLoader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                              shuffle=False, num_workers=4)
 
-    return trainloader, testloader
+    return trainLoader, testLoader
