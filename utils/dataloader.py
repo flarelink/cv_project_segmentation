@@ -10,6 +10,9 @@ plt.ion()
 __all__ = ['load_data_Cityscapes', 'load_data_VOC']
 
 
+#TODO:  Look at these loaders and figure out how to morph them to the code
+#       They are very new, came out sometime early 2019 and seem to have no
+#       usages online.
 def load_data_Cityscapes(batch_size):
     """
     Load Cityscapes dataloaders
@@ -71,8 +74,8 @@ def load_data_VOC(batch_size):
                                                     transform=transform,
                                                     target_transform=transform)
 
-    trainLoader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                              shuffle=True, num_workers=4)
+    #trainLoader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+    #                                          shuffle=True, num_workers=4)
 
     testset = torchvision.datasets.VOCSegmentation(root='./VOC',
                                                    image_set='val',
@@ -80,7 +83,7 @@ def load_data_VOC(batch_size):
                                                    transform=transform,
                                                    target_transform=transform)
 
-    testLoader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                             shuffle=False, num_workers=4)
+    #testLoader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+    #                                         shuffle=False, num_workers=4)
 
-    return trainLoader, testLoader
+    #return trainLoader, testLoader

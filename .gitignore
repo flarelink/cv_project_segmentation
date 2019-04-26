@@ -11,5 +11,6 @@ license.txt
 README
 
 # ignore outputs made from previous models and scores
-model_output/
-scores/
+saved_models/
+logs/
+loss_plots/

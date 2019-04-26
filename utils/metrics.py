@@ -1,6 +1,11 @@
+# =============================================================================
+# metrics.py - metrics from reference for semantic segmentation
+# References:
+# - https://github.com/meetshah1995/pytorch-semseg
+# =============================================================================
+
 # Adapted from score written by wkentaro
 # https://github.com/wkentaro/pytorch-fcn/blob/master/torchfcn/utils.py
-# reference: https://github.com/meetshah1995/pytorch-semseg/blob/master/ptsemseg/metrics.py
 
 import numpy as np
 
