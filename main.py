@@ -3,7 +3,7 @@
 # Authors:  Humza Syed & Yuri Yakovlev
 # References:
 # - https://github.com/yunlongdong/FCN-pytorch-easiest
-# - https://github.com/pochih/FCN-pytorch
+# - https://github.com/meetshah1995/pytorch-semseg
 # =============================================================================
 
 """
@@ -14,17 +14,13 @@
 from __future__ import print_function, division
 
 import torch
-import torchvision
-import torch.nn as nn
 import torch.optim as optim
-from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import numpy as np
-import matplotlib.pyplot as plt
 import argparse
-import random
 import time
 import os
+from datetime import datetime
 
 """
 ##############################################################################
@@ -32,12 +28,15 @@ import os
 ##############################################################################
 """
 # models
-from models.VGG import *
 from models.FCN import *
+from models.SegNet import *
 
 # utils
 from utils.dataloader import *
-
+from utils.loss import *
+from utils.metrics import *
+from utils.cityscapes_loader import *
+from utils.pascal_voc_loader import *
 
 """
 ##############################################################################
@@ -53,13 +52,151 @@ else:
     device = torch.device('cpu')
     print(device, " the CPU device is selected")
 
+
+"""
+##############################################################################
+# Training, Validation, and Testing
+##############################################################################
+"""
+def training(model, run, n_epochs, dataset, trainLoader, testLoader, running_metrics, model_dir, log_file):
+    """
+    Training process for semantic segmentation
+
+    :param model: chosen model, ex) FCNs
+    :param run: current run of the program
+    :param n_epochs: number of epochs
+    :param dataset: chosen dataset, ex) Cityscapes
+    :param trainLoader: train dataset loader
+    :param testLoader: test dataset loader
+    :param running_metrics: class to save metrics over time
+    :param model_dir: directory for model output
+    :return:
+    """
+
+    # set best iou variable to be initialized for testing
+    best_iou = 0
+
+    # record loss over time
+    loss_list = []
+
+    # set loss and optimization method
+    criterion = cross_entropy2d
+    optimizer = optim.SGD(model.parameters(), lr=1e-3, momentum=0.9,
+                          weight_decay=0.0016)  # paper uses stochastic gradient descent
+
+    # run through each epoch
+    for epoch in range(n_epochs):
+
+        # grab initial time at each epoch
+        begin_epoch = time.time()
+
+        # run through each image relative to batch size
+        for iter, data in enumerate(trainLoader, 0):
+
+            # set to train model
+            model.train()
+
+            # grab images with labels
+            images, labels = data
+            images = images.to(device)
+            labels = labels.to(device)
+
+            # set gradient to zero
+            optimizer.zero_grad()
+
+            # run through model, collect loss, then backprop
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+
+
+            # print info after 50 iterations during an epoch
+            if iter % 50 == 0:
+                print("epoch: {}, iter: {}, loss: {}".format(epoch, iter, loss.item()))
+                log_file.write("epoch: {}, iter: {}, loss: {}".format(epoch, iter, loss.item()))
+
+        loss_list.append(loss.item())
+        # print time after each epoch
+        print("Finished epoch {}, time elapsed {}".format(epoch, time.time() - begin_epoch))
+        log_file.write("\nFinished epoch {}, time elapsed {} \n".format(epoch, time.time() - begin_epoch))
+
+        # run through testing on model
+        score, class_iou = testing(model, run, epoch, dataset, testLoader, running_metrics, best_iou, model_dir, log_file)
+
+    # saving model after running through all epochs
+    name = '{}_{}_final_epoch_at_epoch_{}_on_run_{}.ckpt'.format(model.__class__.__name__, dataset, n_epochs, run)
+    path = os.path.join(model_dir, name)
+    torch.save(model.state_dict(), path)
+
+    return score, class_iou, loss_list, name
+
+
+def testing(model, run, epoch, dataset, testLoader, running_metrics, best_iou, model_dir, log_file):
+    """
+    Testing process for semantic segmentation
+
+    :param model: chosen model, ex) FCNs
+    :param run: current run of the program
+    :param epoch: current epoch
+    :param dataset: chosen dataset, ex) Cityscapes
+    :param testLoader: testing dataset loader
+    :param running_metrics: class to save metrics over time
+    :param best_iou: save models with best_iou after 10 epochs
+    :param model_dir: directory for model output
+    :return:
+    """
+
+    # set model to evuation mode
+    model.eval()
+
+    # don't want to compute gradients so no grad
+    with torch.no_grad():
+
+        # run through each image relative to batch size
+        for iter, data in enumerate(testLoader, 0):
+
+            # grab images with labels
+            images, labels = data
+            images = images.to(device)
+            #labels = labels.to(device)
+
+            # run through model
+            output = model(images)
+
+            # check predicted vs ground truth
+            pred = output.data.max(1)[1].cpu().numpy()
+            gt = labels.data.cpu().numpy()
+
+            # update running metrics
+            running_metrics.update(gt, pred)
+
+    # get metrics from running metrics
+    score, class_iou = running_metrics.get_scores()
+    for k, v in score.items():
+        print(k, v)
+        log_file.write('{} {} \n'.format(k, v))
+
+    log_file.write('\n class iou \n')
+    for k, v in class_iou.items():
+        print(k, v)
+        log_file.write('{} {} \n'.format(k, v))
+    running_metrics.reset()
+
+    # check if best iou was obtained and if epoch > 10, then if true, save that model
+    if score["Mean IoU : \t"] > best_iou and epoch+1 % 25 == 0:
+        name = os.path.join(model_dir, '{}_{}_best_iou_at_epoch_{}_on_run_{}.ckpt'.format(model.__class__.__name__, dataset, epoch, run))
+        torch.save(model.state_dict(), name)
+
+    return score, class_iou
+
+
 """
 ##############################################################################
 # Parser
 ##############################################################################
 """
-
-
 def create_parser():
     """
     Function to take in input arguments from the user
@@ -86,157 +223,35 @@ def create_parser():
                         help='Specify log name, if not specified will set to default; default=testing')
 
     # arguments for determining which dataset to run
-    parser.add_argument('--t_dataset', type=int, default=0,
+    parser.add_argument('--dataset', type=str, default='City',
                         help="""Chooses dataset:
-                                 0 - Cityscapes 
-                                 1 - PASCAL VOC 2011
-                                 2 - CamVid  
-                                 default=0""")
-    parser.add_argument('--n_classes', type=int, default=10,
-                        help='Number of classes in dataset; default=10')
+                                 City 
+                                 VOC
+                                 default=City""")
 
     # determine which model to pick
-    parser.add_argument('--t_model', type=int, default=0,
+    parser.add_argument('--model', type=str, default='Segnet',
                         help="""Chooses model type:
-                             0 - FCNs
-                             1 - FCN8s 
-                             2 - FCN16s 
-                             3 - FCN32s   
-                             default=0""")
+                             FCN
+                             FCN8
+                             FCN16
+                             FCN32 
+                             Segnet
+                             default=Segnet""")
 
     # arguments for hyperparameters
     parser.add_argument('--n_epochs', type=int, default=100,
                         help='Defines num epochs for training; default=100')
     parser.add_argument('--n_runs', type=int, default=1,
                         help='Defines num runs for program; default=1')
-    parser.add_argument('--batch_size', type=int, default=16,
-                        help='Defines batch size for data; default=16')
-    parser.add_argument('--lr', type=float, default=1e-3,
-                        help='Defines learning rate for training; default=1e-2')
-    parser.add_argument('--decay', type=float, default=0.0004,
-                        help='Defines decay for training; default=0.0004')
+    parser.add_argument('--batch_size', type=int, default=1,
+                        help='Defines batch size for data; default=1')
     parser.add_argument('--random_seed', type=int, default=7,
                         help='Defines random seed value, if set to 0 then randomly sets seed; default=7')
 
     args = parser.parse_args()
 
     return args
-
-
-"""
-##############################################################################
-# Training, Validation, and Testing
-##############################################################################
-"""
-def training(n_epochs, n_class, model, optimizer, criterion, train_loader, val_loader, IU_scores, pixel_scores, model_dir, score_dir):
-    """
-    Training process for semantic segmentation
-
-    :param n_epochs: number of epochs
-    :param n_class: number of classes
-    :param model: chosen model, ex) FCNs
-    :param optimizer: input optimizer, ex) SGD
-    :param criterion: loss criteria, ex) BCE for semantic segmentation
-    :param train_loader: train dataset loader
-    :param val_loader: validation dataset loader
-    :param IU_scores: Intersection Over Union measurement
-    :param pixel_scores: Pixel intersection score
-    :param model_dir: directory for model output
-    :param score_dir: directory for scores output
-    :return:
-    """
-    # run through each epoch
-    for epoch in range(n_epochs):
-
-        # grab initial time at each epoch
-        begin_epoch = time.time()
-
-        # run through each image relative to batch size
-        for iter, batch in enumerate(train_loader):
-            optimizer.zero_grad()
-
-            # grab images with labels
-            inputs, labels = Variable(batch['X']).to(device), Variable(batch['Y']).to(device)
-
-            # run through model, collect loss, then backprop
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-
-            # print additional information about epoch every 10 epochs
-            if iter % 10 == 0:
-                print("epoch{}, iter{}, loss: {}".format(epoch, iter, loss.data[0]))
-
-        # print time after each epoch
-        print("Finish epoch {}, time elapsed {}".format(epoch, time.time() - begin_epoch))
-        torch.save(model, model_dir)
-
-        val(epoch, n_class, model, val_loader, IU_scores, pixel_scores, score_dir)
-
-
-def val(epoch, n_class, model, val_loader, IU_scores, pixel_scores, score_dir):
-    """
-    Training process for semantic segmentation
-
-    :param epoch: number of epochs
-    :param n_class: number of classes
-    :param model: chosen model, ex) FCNs
-    :param val_loader: validation dataset loader
-    :param IU_scores: Intersection Over Union measurement
-    :param pixel_scores: Pixel intersection score
-    :param score_dir: directory for scores output
-    :return:
-    """
-    model.eval()
-    total_ious = []
-    pixel_accs = []
-    for iter, batch in enumerate(val_loader):
-
-        inputs = Variable(batch['X'].cuda())
-
-        output = model(inputs)
-        output = output.data.cpu().numpy()
-
-        N, _, h, w = output.shape
-        pred = output.transpose(0, 2, 3, 1).reshape(-1, n_class).argmax(axis=1).reshape(N, h, w)
-
-        target = batch['l'].cpu().numpy().reshape(N, h, w)
-        for p, t in zip(pred, target):
-            total_ious.append(iou(p, t, n_class))
-            pixel_accs.append(pixel_acc(p, t))
-
-    # Calculate average IoU
-    total_ious = np.array(total_ious).T  # n_class * val_len
-    ious = np.nanmean(total_ious, axis=1)
-    pixel_accs = np.array(pixel_accs).mean()
-    print("epoch{}, pix_acc: {}, meanIoU: {}, IoUs: {}".format(epoch, pixel_accs, np.nanmean(ious), ious))
-    IU_scores[epoch] = ious
-    np.save(os.path.join(score_dir, "meanIU"), IU_scores)
-    pixel_scores[epoch] = pixel_accs
-    np.save(os.path.join(score_dir, "meanPixel"), pixel_scores)
-
-
-# borrow functions and modify it from https://github.com/Kaixhin/FCN-semantic-segmentation/blob/master/main.py
-# Calculates class intersections over unions
-def iou(pred, target, n_class):
-    ious = []
-    for cls in range(n_class):
-        pred_inds = pred == cls
-        target_inds = target == cls
-        intersection = pred_inds[target_inds].sum()
-        union = pred_inds.sum() + target_inds.sum() - intersection
-        if union == 0:
-            ious.append(float('nan'))  # if there is no ground truth, do not include in evaluation
-        else:
-            ious.append(float(intersection) / max(union, 1))
-    return ious
-
-
-def pixel_acc(pred, target):
-    correct = (pred == target).sum()
-    total   = (target == target).sum()
-    return correct / total
 
 
 """
@@ -252,60 +267,179 @@ def main():
     # load parsed arguments
     args = create_parser()
 
-    if (args.random_seed == 0):
-        args.random_seed = random.randint(1, 1000)
-
     # set reproducible random seed
     np.random.seed(args.random_seed)
     torch.manual_seed(args.random_seed)
+    torch.cuda.manual_seed(args.random_seed)
 
-    # create dir for model
-    model_dir = "models_output"
+    # create dir for model output
+    model_dir = "saved_models"
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
 
-    # create dir for score
-    score_dir = "scores"
-    if not os.path.exists(score_dir):
-        os.makedirs(score_dir)
+    # create dir for loss plots
+    loss_dir = "loss_plots"
+    if not os.path.exists(loss_dir):
+        os.makedirs(loss_dir)
 
-    # determine which model was chosen relative to args.t_model
-    model = None
-    if(0 <= args.t_model <= 4):
-        vgg_model = VGGNet()
-        if(args.t_model == 0):
-            model = FCNs(pretrained_net=vgg_model, n_class=args.n_classes)
-        elif(args.t_model == 2):
-            model = FCN8s(pretrained_net=vgg_model, n_class=args.n_classes)
-        elif (args.t_model == 3):
-            model = FCN16s(pretrained_net=vgg_model, n_class=args.n_classes)
-        else: #only other case is 4
-            model = FCN32s(pretrained_net=vgg_model, n_class=args.n_classes)
+    # create dir for loss plots
+    logs_dir = "logs"
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
 
-    # set loss and optimization method
-    criterion = nn.BCELoss().to(device) # BCE loss since we want pixel by pixel comparison to ground truth
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.7) # paper uses stochastic gradient descent
+    # open log files and fill in with data
+    today_time = str(datetime.today()).replace(':', '_').replace(' ', '_')
+    csv_file = open('./logs/log_run_{}_{}.csv'.format(today_time, args.log_name), 'w+')
+    csv_file.write('dataset, model, num_epochs, num_of_runs, current_run, batch_size, '
+                   'Overall Acc, Mean Acc, FreqW Acc, Mean IoU \n')
+    log_file = open('./logs/log_run_{}_{}.txt'.format(today_time, args.log_name), 'w+')
+    log_file.write('dataset     = {} \n'.format(args.dataset))
+    log_file.write('model       = {} \n'.format(args.model))
+    log_file.write('n_epochs    = {} \n'.format(args.n_epochs))
+    log_file.write('n_runs      = {} \n'.format(args.n_runs))
+    log_file.write('batch_size  = {} \n'.format(args.batch_size))
 
-    # variables to determine scores to measure model performance on validation set
-    IU_scores = torch.zeros((args.n_epochs, args.n_class))
-    pixel_scores = torch.zeros(args.n_epochs)
 
-    # training and validation
-    # TODO - replace the loaders with datasets later
-    train_loader = None
-    val_loader = None
-    training(args.n_epochs,
-             args.n_classes,
-             model,
-             optimizer,
-             criterion,
-             train_loader,
-             val_loader,
-             IU_scores,
-             pixel_scores,
-             model_dir,
-             score_dir)
+    ################ PICK DATASET ################
+    # determine dataset being used
+    if(args.dataset == 'City'):
+        #trainLoader, _, testLoader = load_data_Cityscapes(args.batch_size)
 
+        t_loader = cityscapesLoader('./cityscapes_dataset',
+                                        is_transform=True, 
+                                        split='train',
+                                        img_size = (256, 256)
+                                        )
+
+        v_loader = cityscapesLoader(
+        root='./cityscapes_dataset',
+        is_transform=True,
+        split='val',
+        img_size=(256, 256)
+        )
+
+        trainLoader = torch.utils.data.DataLoader(
+        t_loader,
+        batch_size=args.batch_size,
+        num_workers=4,
+        shuffle=True,
+        )
+
+        testLoader = torch.utils.data.DataLoader(
+            v_loader, batch_size=args.batch_size, num_workers=4
+        )
+
+        n_classes = 19
+    elif(args.dataset == 'VOC'):
+
+        # use this to download the VOC dataset
+        #trainLoader, testLoader = load_data_VOC(args.batch_size)
+        load_data_VOC(args.batch_size)
+
+        # in the VOC folder, download the single tarbal here at:
+        # http://home.bharathh.info/pubs/codes/SBD/download.html
+        # that's needed for the pascal dataloading
+
+        if(os.path.exists('./VOC/benchmark') == False):
+            print('Need to download benchmark for dataset.')
+            print('You can find that here:')
+            print('http://home.bharathh.info/pubs/codes/SBD/download.html')
+            print('Click on the link for here in the sentence:')
+            print('The dataset and benchmark can be downloaded as a single tarball here.')
+            print('Place the extracted benchmark folder into the VOC directory')
+            import sys
+            sys.exit(0)
+
+        t_loader = pascalVOCLoader(root='./VOC/VOCdevkit/VOC2012/',
+                                   is_transform=True,
+                                   split='train',
+                                   img_size=(256, 256),
+                                   sbd_path='./VOC/benchmark/benchmark_RELEASE/'
+                                    )
+
+        v_loader = pascalVOCLoader(
+            root='./VOC/VOCdevkit/VOC2012/',
+            is_transform=True,
+            split='val',
+            img_size=(256, 256),
+            sbd_path='./VOC/benchmark/benchmark_RELEASE/'
+        )
+
+        trainLoader = torch.utils.data.DataLoader(
+            t_loader,
+            batch_size=args.batch_size,
+            num_workers=4,
+            shuffle=True,
+        )
+
+        testLoader = torch.utils.data.DataLoader(
+            v_loader, batch_size=args.batch_size, num_workers=4
+        )
+        n_classes = 21
+    else:
+        raise ValueError('Invalid dataset name. Run python3 main.py -h to review your options.')
+
+    ################ PICK MODEL ################
+    # determine which model was chosen
+    vgg_model = VGGNet(requires_grad=True)
+    if (args.model == 'FCN'):
+        model = FCNs(pretrained_net=vgg_model, n_class=n_classes).to(device)
+    elif (args.model == 'FCN8'):
+        model = FCN8s(pretrained_net=vgg_model, n_class=n_classes).to(device)
+    elif (args.model == 'FCN16'):
+        model = FCN16s(pretrained_net=vgg_model, n_class=n_classes).to(device)
+    elif (args.model == 'FCN32'):
+        model = FCN32s(pretrained_net=vgg_model, n_class=n_classes).to(device)
+    elif (args.model == 'Segnet'):
+        model = Segnet(n_classes=n_classes, in_channels=3, is_unpooling=True).to(device)
+    else:
+        raise ValueError('Invalid model name. Run python3 main.py -h to review your options.')
+
+    print(model.__class__.__name__ + ' was selected')
+
+    # metrics
+    running_metrics = runningScore(n_classes)
+
+    ################ TRAINING ################
+    for run in range(args.n_runs):
+        log_file.write('Current run is: {} \n'.format(run))
+
+        # training and validation in one function
+        score, class_iou, loss_list, name = training(model,
+                                                     run,
+                                                     args.n_epochs,
+                                                     args.dataset,
+                                                     trainLoader,
+                                                     testLoader,
+                                                     running_metrics,
+                                                     model_dir,
+                                                     log_file)
+        # record metrics for logging
+        metric_vals = []
+        for metric, val in score.items():
+            metric_vals.append(val)
+
+        csv_file.write('{}, {}, {}, {}, {}, {}, '
+                       '{}, {}, {}, {} \n'.format(args.dataset,
+                                                   args.model,
+                                                   args.n_epochs,
+                                                   args.n_runs,
+                                                   run,
+                                                   args.batch_size,
+                                                   metric_vals[0],
+                                                   metric_vals[1],
+                                                   metric_vals[2],
+                                                   metric_vals[3]
+                                                   ))
+
+        log_file.write('\n Final metrics: \n'.format(metric_vals[0]))
+        log_file.write('Overall Acc = {} \n'.format(metric_vals[0]))
+        log_file.write('Mean Acc    = {} \n'.format(metric_vals[1]))
+        log_file.write('FreqW Acc   = {} \n'.format(metric_vals[2]))
+        log_file.write('Mean IoU    = {} \n'.format(metric_vals[3]))
+
+        # plot loss over time
+        loss_plotter(loss_list, name)
 
 if __name__ == '__main__':
     main()

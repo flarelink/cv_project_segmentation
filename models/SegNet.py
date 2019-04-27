@@ -1,5 +1,5 @@
 # =============================================================================
-# SegNet.py - SegNet implementations taken directly from reference
+# SegNet.py - SegNet implementations from reference
 # References:
 # - https://github.com/meetshah1995/pytorch-semseg
 # =============================================================================

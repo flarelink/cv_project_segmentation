@@ -1,0 +1,16 @@
+# ignore datasets
+cityscapes_dataset/
+VOC/
+
+# ignore zips
+gtFine_trainvaltest.zip
+leftImg8bit_trainvaltest.zip
+
+# ignore extra files
+license.txt
+README
+
+# ignore outputs made from previous models and scores
+saved_models/
+logs/
+loss_plots/
