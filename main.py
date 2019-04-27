@@ -110,16 +110,17 @@ def training(model, run, n_epochs, dataset, trainLoader, testLoader, running_met
             loss.backward()
             optimizer.step()
 
-            loss_list.append(loss.item())
 
-            # print info after 10 iterations during an epoch
-            if iter % 40 == 0:
+
+            # print info after 50 iterations during an epoch
+            if iter % 50 == 0:
                 print("epoch: {}, iter: {}, loss: {}".format(epoch, iter, loss.item()))
-                log_file.write("\n epoch: {}, iter: {}, loss: {} \n".format(epoch, iter, loss.item()))
+                log_file.write("epoch: {}, iter: {}, loss: {}".format(epoch, iter, loss.item()))
 
+        loss_list.append(loss.item())
         # print time after each epoch
         print("Finished epoch {}, time elapsed {}".format(epoch, time.time() - begin_epoch))
-        log_file.write("Finished epoch {}, time elapsed {} \n".format(epoch, time.time() - begin_epoch))
+        log_file.write("\nFinished epoch {}, time elapsed {} \n".format(epoch, time.time() - begin_epoch))
 
         # run through testing on model
         score, class_iou = testing(model, run, epoch, dataset, testLoader, running_metrics, best_iou, model_dir, log_file)
@@ -184,7 +185,7 @@ def testing(model, run, epoch, dataset, testLoader, running_metrics, best_iou, m
     running_metrics.reset()
 
     # check if best iou was obtained and if epoch > 10, then if true, save that model
-    if score["Mean IoU : \t"] > best_iou and epoch >= 10:
+    if score["Mean IoU : \t"] > best_iou and epoch+1 % 25 == 0:
         name = os.path.join(model_dir, '{}_{}_best_iou_at_epoch_{}_on_run_{}.ckpt'.format(model.__class__.__name__, dataset, epoch, run))
         torch.save(model.state_dict(), name)
 
