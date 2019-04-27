@@ -353,7 +353,7 @@ def main():
         t_loader = pascalVOCLoader(root='./VOC/VOCdevkit/VOC2012/',
                                    is_transform=True,
                                    split='train',
-                                   img_size=(256, 256),
+                                   #img_size=(256, 256),
                                    sbd_path='./VOC/benchmark/benchmark_RELEASE/'
                                     )
 
@@ -361,7 +361,7 @@ def main():
             root='./VOC/VOCdevkit/VOC2012/',
             is_transform=True,
             split='val',
-            img_size=(256, 256),
+            #img_size=(256, 256),
             sbd_path='./VOC/benchmark/benchmark_RELEASE/'
         )
 
