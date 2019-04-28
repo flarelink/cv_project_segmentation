@@ -32,5 +32,5 @@ def loss_plotter(loss_list, name):
     plt.xlabel('Epochs')
     plt.ylabel('Training Loss')
     plt.plot(loss_list)
-    plt.savefig('./loss_plots/' + name + 'loss_plot.png')
+    plt.savefig('./loss_plots/' + name + '_loss_plot.png')
     plt.close('all')

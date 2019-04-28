@@ -126,7 +126,8 @@ def training(model, run, n_epochs, dataset, trainLoader, testLoader, running_met
         score, class_iou = testing(model, run, epoch, dataset, testLoader, running_metrics, best_iou, model_dir, log_file)
 
     # saving model after running through all epochs
-    name = '{}_{}_final_epoch_at_epoch_{}_on_run_{}.ckpt'.format(model.__class__.__name__, dataset, n_epochs, run)
+    today_time = str(datetime.today()).replace(':', '_').replace(' ', '_')
+    name = '{}_{}_{}_final_epoch_at_epoch_{}_on_run_{}.ckpt'.format(today_time, model.__class__.__name__, dataset, n_epochs, run)
     path = os.path.join(model_dir, name)
     torch.save(model.state_dict(), path)
 
@@ -308,14 +309,14 @@ def main():
         t_loader = cityscapesLoader('./cityscapes_dataset',
                                         is_transform=True, 
                                         split='train',
-                                        img_size = (256, 256)
+                                        #img_size = (256, 256)
                                         )
 
         v_loader = cityscapesLoader(
         root='./cityscapes_dataset',
         is_transform=True,
         split='val',
-        img_size=(256, 256)
+        #img_size=(256, 256)
         )
 
         trainLoader = torch.utils.data.DataLoader(
@@ -438,6 +439,7 @@ def main():
         log_file.write('FreqW Acc   = {} \n'.format(metric_vals[2]))
         log_file.write('Mean IoU    = {} \n'.format(metric_vals[3]))
 
+        name = '{}_{}'.format(today_time, args.log_name)
         # plot loss over time
         loss_plotter(loss_list, name)
 
