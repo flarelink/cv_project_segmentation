@@ -37,6 +37,7 @@ from utils.loss import *
 from utils.metrics import *
 from utils.cityscapes_loader import *
 from utils.pascal_voc_loader import *
+from utils.nyuv2_loader import *
 
 """
 ##############################################################################
@@ -224,11 +225,11 @@ def create_parser():
                         help='Specify log name, if not specified will set to default; default=testing')
 
     # arguments for determining which dataset to run
-    parser.add_argument('--dataset', type=str, default='City',
+    parser.add_argument('--dataset', type=str, default='NYUv2',
                         help="""Chooses dataset:
                                  City 
-                                 VOC
-                                 default=City""")
+                                 NYUv2
+                                 default=NYUv2""")
 
     # determine which model to pick
     parser.add_argument('--model', type=str, default='Segnet',
@@ -331,52 +332,29 @@ def main():
         )
 
         n_classes = 19
-    elif(args.dataset == 'VOC'):
-
-        # use this to download the VOC dataset
-        #trainLoader, testLoader = load_data_VOC(args.batch_size)
-        load_data_VOC(args.batch_size)
-
-        # in the VOC folder, download the single tarbal here at:
-        # http://home.bharathh.info/pubs/codes/SBD/download.html
-        # that's needed for the pascal dataloading
-
-        if(os.path.exists('./VOC/benchmark') == False):
-            print('Need to download benchmark for dataset.')
-            print('You can find that here:')
-            print('http://home.bharathh.info/pubs/codes/SBD/download.html')
-            print('Click on the link for here in the sentence:')
-            print('The dataset and benchmark can be downloaded as a single tarball here.')
-            print('Place the extracted benchmark folder into the VOC directory')
-            import sys
-            sys.exit(0)
-
-        t_loader = pascalVOCLoader(root='./VOC/VOCdevkit/VOC2012/',
+    elif(args.dataset == 'NYUv2'):
+        t_loader = NYUv2Loader(root='./NYUv2/',
                                    is_transform=True,
-                                   split='train',
-                                   #img_size=(256, 256),
-                                   sbd_path='./VOC/benchmark/benchmark_RELEASE/'
+                                   split='training'
                                     )
 
-        v_loader = pascalVOCLoader(
-            root='./VOC/VOCdevkit/VOC2012/',
+        v_loader = NYUv2Loader(
+            root='./NYUv2/',
             is_transform=True,
             split='val',
-            #img_size=(256, 256),
-            sbd_path='./VOC/benchmark/benchmark_RELEASE/'
         )
 
         trainLoader = torch.utils.data.DataLoader(
             t_loader,
             batch_size=args.batch_size,
             num_workers=4,
-            shuffle=True,
+            shuffle=True
         )
 
         testLoader = torch.utils.data.DataLoader(
             v_loader, batch_size=args.batch_size, num_workers=4
         )
-        n_classes = 21
+        n_classes = 14
     else:
         raise ValueError('Invalid dataset name. Run python3 main.py -h to review your options.')
 
