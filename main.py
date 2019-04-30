@@ -124,7 +124,7 @@ def training(model, run, n_epochs, dataset, trainLoader, testLoader, running_met
         log_file.write("\nFinished epoch {}, time elapsed {} \n".format(epoch, time.time() - begin_epoch))
 
         # run through testing on model
-        score, class_iou = testing(model, run, epoch, dataset, testLoader, running_metrics, best_iou, model_dir, log_file)
+        score, class_iou, best_iou = testing(model, run, epoch, dataset, testLoader, running_metrics, best_iou, model_dir, log_file)
 
     # saving model after running through all epochs
     today_time = str(datetime.today()).replace(':', '_').replace(' ', '_')
@@ -187,11 +187,11 @@ def testing(model, run, epoch, dataset, testLoader, running_metrics, best_iou, m
     running_metrics.reset()
 
     # check if best iou was obtained and if epoch > 10, then if true, save that model
-    if score["Mean IoU : \t"] > best_iou and epoch+1 % 25 == 0:
+    if score["Mean IoU : \t"] > best_iou and epoch >= 49:
         name = os.path.join(model_dir, '{}_{}_best_iou_at_epoch_{}_on_run_{}.ckpt'.format(model.__class__.__name__, dataset, epoch, run))
         torch.save(model.state_dict(), name)
 
-    return score, class_iou
+    return score, class_iou, best_iou
 
 
 """
