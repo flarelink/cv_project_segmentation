@@ -1,4 +1,5 @@
 # download dataset from links shown below
+# then put all extracted folders into a folder called: NYUv2
 
 import os
 import collections

@@ -4,6 +4,7 @@
 # - https://github.com/meetshah1995/pytorch-semseg
 # Download gtFine_trainvaltest.zip and leftImg8bit_trainvaltest.zip from:
 # https://www.cityscapes-dataset.com/downloads/
+# then put both the extracted folders into a folder called: cityscapes_dataset
 # =============================================================================
 
 import os
