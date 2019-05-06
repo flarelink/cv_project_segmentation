@@ -1,6 +1,7 @@
 # ignore datasets
 cityscapes_dataset/
 VOC/
+NYUv2/
 
 # ignore zips
 gtFine_trainvaltest.zip
@@ -9,6 +10,7 @@ leftImg8bit_trainvaltest.zip
 # ignore extra files
 license.txt
 README
+*.pyc
 
 # ignore outputs made from previous models and scores
 saved_models/

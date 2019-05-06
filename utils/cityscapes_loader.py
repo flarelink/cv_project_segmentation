@@ -2,6 +2,8 @@
 # cityscapes_loader.py - loader class for cityscapes
 # References:
 # - https://github.com/meetshah1995/pytorch-semseg
+# Download gtFine_trainvaltest.zip and leftImg8bit_trainvaltest.zip from:
+# https://www.cityscapes-dataset.com/downloads/
 # =============================================================================
 
 import os

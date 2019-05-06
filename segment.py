@@ -10,7 +10,9 @@
 # python segment.py --model FCN --dataset City --model_path ./saved_models/FCNs_City_best_iou_at_epoch_71_on_run_0.ckpt --img_path ./cityscapes_dataset/leftImg8bit/test/berlin/berlin_000001_000019_leftImg8bit.png --out_path ./seg_out/city_segnet_out.png
 
 # example runs for segnet and fcn on nyu
-#
+# python segment.py --model Segnet --dataset NYUv2 --model_path ./saved_models/2019-04-29_11_57_46.913750_Segnet_NYUv2_final_epoch_at_epoch_100_on_run_0.ckpt --img_path ./NYUv2/nyu_test_rgb/nyu_rgb_0001.png --out_path ./seg_out/nyu_seg_out.png
+# python segment.py --model FCN --dataset NYUv2 --model_path ./saved_models/2019-04-29_19_23_21.294338_FCNs_NYUv2_final_epoch_at_epoch_100_on_run_0.ckpt --img_path ./NYUv2/nyu_test_rgb/nyu_rgb_0001.png --out_path ./seg_out/nyu_fcn_out.png
+
 
 import os
 import torch
@@ -89,6 +91,12 @@ def test(args):
 
 
 if __name__ == "__main__":
+
+    # create dir for model output
+    seg_dir = "seg_out"
+    if not os.path.exists(seg_dir):
+        os.makedirs(seg_dir)
+
     parser = argparse.ArgumentParser(description="Params")
     parser.add_argument(
         "--model_path",

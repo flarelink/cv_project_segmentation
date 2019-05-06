@@ -4,6 +4,7 @@
 # References:
 # - https://github.com/yunlongdong/FCN-pytorch-easiest
 # - https://github.com/meetshah1995/pytorch-semseg
+# Check dataset loader files to find links to download the respective datasets
 # =============================================================================
 
 """

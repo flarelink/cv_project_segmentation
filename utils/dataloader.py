@@ -21,7 +21,7 @@ def load_data_Cityscapes(batch_size):
     """
 
     transform = transforms.Compose([
-    transforms.Resize((256, 256)),
+    #transforms.Resize((256, 256)),
     transforms.ToTensor()
     ])
 
@@ -64,7 +64,7 @@ def load_data_VOC(batch_size):
     """
 
     transform = transforms.Compose([
-    transforms.Resize((256, 256)),
+    #transforms.Resize((256, 256)),
     transforms.ToTensor()
     ])
 
