@@ -1,4 +1,4 @@
-# cv_project_segmentation
+# Semantic Segmentation
 
 Computer vision class final project for semantic segmentation.
 
